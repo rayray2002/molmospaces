@@ -242,9 +242,8 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
         # floor-standing mobile base: sample around the object like RBY1, not on a pedestal
         datagen_cfg.task_sampler_config.base_pose_sampling_radius_range = (0.0, 0.55)  # top-down YAM reach ~0.5 m
         datagen_cfg.task_sampler_config.robot_safety_radius = 0.30  # base half-width 0.275
-        # grasp-collision proxy at the YAM gripper's 75 mm opening (less margin), not the Robotiq's
-        # 80 mm, so grasps around objects too wide for it are filtered out before planning
-        datagen_cfg.policy_config.grasp_width = 0.07
+        # grasp-collision proxy at the linear gripper's ~97 mm opening less margin
+        datagen_cfg.policy_config.grasp_width = 0.09
     else:
         raise ValueError
 

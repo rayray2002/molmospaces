@@ -165,9 +165,10 @@ class LinearBotRobot(BimanualYamRobot):
             arm_spec = cls._load_robot_spec(cfg, strip_meshes=strip_meshes)
             frame = carriage.add_frame(pos=[cfg.arm_mount_x, y, 0])
             frame.attach_body(arm_spec.body("arm"), f"{prefix}{side}_", "")
-            grip = spec.actuator(f"{prefix}{side}_gripper")
-            grip.gainprm[0] = cfg.gripper_kp
-            grip.biasprm[1:3] = [-cfg.gripper_kp, -cfg.gripper_kd]
+            for tip in ["left", "right"]:
+                grip = spec.actuator(f"{prefix}{side}_gripper_{tip}_tip")
+                grip.gainprm[0] = cfg.gripper_kp
+                grip.biasprm[1:3] = [-cfg.gripper_kp, -cfg.gripper_kd]
             link6 = spec.body(f"{prefix}{side}_link_6")
             link6.add_camera(
                 name=f"{prefix}{side}_wrist_camera",

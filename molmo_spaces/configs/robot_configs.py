@@ -402,7 +402,9 @@ class LinearBotRobotConfig(BaseRobotConfig):
     robot_view_factory: RobotViewFactory | None = LinearBotRobotView
     robot_namespace: str = "robot_0/"
     name: str = "i2rt_yam"  # arm meshes come from the YAM asset directory
-    robot_xml_path: Path = Path("yam.xml")
+    # AI2's YAM variant with the 95 mm linear gripper (the one I2RT ships), flat tip pads and one
+    # servo per finger; yam.xml has an older 75 mm gripper with capsule tips
+    robot_xml_path: Path = Path("yam_ai2.xml")
 
     # --- geometry (metres, robot base frame: +x forward, z up from the floor) ---
     base_size: list[float] = [0.55, 0.55, 0.30]  # footprint from caster spacing; height guessed

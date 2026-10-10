@@ -6,20 +6,20 @@ Arm and gripper move groups are the bimanual YAM ones (same joint/actuator names
 the `left_` / `right_` prefixes); the base follows the mobile Franka's virtual holonomic joints.
 """
 
+from typing import Literal
+
 import numpy as np
 from mujoco import MjData
 
 from molmo_spaces.robots.robot_views.abstract import (
+    GripperGroup,
     HoloJointsRobotBaseGroup,
     MJCFFrameMixin,
     RobotBaseGroup,
     RobotView,
     SimplyActuatedMoveGroup,
 )
-from molmo_spaces.robots.robot_views.bimanual_yam_view import (
-    BimanualYamArmGroup,
-    BimanualYamGripperGroup,
-)
+from molmo_spaces.robots.robot_views.bimanual_yam_view import BimanualYamArmGroup
 from molmo_spaces.utils.mj_model_and_data_utils import body_pose
 
 
@@ -62,6 +62,46 @@ class LinearBotLiftGroup(MJCFFrameMixin, SimplyActuatedMoveGroup):
         return body_pose(self.mj_data, self._column_id)
 
 
+class LinearBotGripperGroup(MJCFFrameMixin, GripperGroup):
+    """The 95 mm linear gripper of yam_ai2.xml: two fingers, one position servo each.
+
+    Finger joints run from 0 (closed) to -0.0485 (open); the tip pads are then ~97 mm apart.
+    """
+
+    OPEN = -0.0475  # actuator ctrlrange end
+
+    def __init__(self, mj_data: MjData, side: Literal["left", "right"], base, namespace: str = ""):
+        model = mj_data.model
+        p = f"{namespace}{side}_"
+        joint_ids = [model.joint(f"{p}left_finger").id, model.joint(f"{p}right_finger").id]
+        act_ids = [model.actuator(f"{p}gripper_left_tip").id, model.actuator(f"{p}gripper_right_tip").id]
+        super().__init__(mj_data, joint_ids, act_ids, model.body(f"{p}link_6").id, base)
+        self._ee_site_id = model.site(f"{p}grasp_site").id
+
+    @property
+    def leaf_frame_id(self) -> int:
+        return self._ee_site_id
+
+    @property
+    def leaf_frame_type(self):
+        return "site"
+
+    def set_gripper_ctrl_open(self, open: bool) -> None:
+        self.ctrl = [self.OPEN, self.OPEN] if open else [0.0, 0.0]
+
+    @property
+    def inter_finger_dist_range(self) -> tuple[float, float]:
+        return 0.0, 0.097
+
+    @property
+    def inter_finger_dist(self) -> float:
+        return float(np.abs(self.joint_pos).sum())
+
+    @property
+    def root_frame_to_world(self) -> np.ndarray:
+        return self.leaf_frame_to_world
+
+
 class LinearBotRobotView(RobotView):
     """Move groups: base (x, y, theta), lift, right_arm, right_gripper, left_arm, left_gripper.
 
@@ -76,9 +116,9 @@ class LinearBotRobotView(RobotView):
             "base": base,
             "lift": LinearBotLiftGroup(mj_data, base, namespace=namespace),
             "right_arm": BimanualYamArmGroup(mj_data, "right", base, namespace=namespace),
-            "right_gripper": BimanualYamGripperGroup(mj_data, "right", base, namespace=namespace),
+            "right_gripper": LinearBotGripperGroup(mj_data, "right", base, namespace=namespace),
             "left_arm": BimanualYamArmGroup(mj_data, "left", base, namespace=namespace),
-            "left_gripper": BimanualYamGripperGroup(mj_data, "left", base, namespace=namespace),
+            "left_gripper": LinearBotGripperGroup(mj_data, "left", base, namespace=namespace),
         }
         super().__init__(mj_data, move_groups)
 
