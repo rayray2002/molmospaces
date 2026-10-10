@@ -22,6 +22,7 @@ from robot_conversion_patches import patch_droid_config_for_rum
 from molmo_spaces.configs.camera_configs import (
     BimanualYamCameraSystem,
     FrankaDroidCameraSystem,
+    LinearBotCameraSystem,
     FrankaRandomizedD405D455CameraSystem,
     RBY1GoProD455CameraSystem,
     I2rtYamCameraSystem,
@@ -42,6 +43,7 @@ from molmo_spaces.configs.robot_configs import (
 )
 from molmo_spaces.configs.robot_configs import (
     BimanualYamRobotConfig,
+    LinearBotRobotConfig,
     FloatingRUMRobotConfig,
     FrankaRobotConfig,
     I2rtYamRobotConfig,
@@ -234,6 +236,15 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
     elif robot == "bimanual_yam":
         datagen_cfg.robot_config = BimanualYamRobotConfig()
         datagen_cfg.camera_config = BimanualYamCameraSystem()
+    elif robot == "linearbot":
+        datagen_cfg.robot_config = LinearBotRobotConfig()
+        datagen_cfg.camera_config = LinearBotCameraSystem()
+        # floor-standing mobile base: sample around the object like RBY1, not on a pedestal
+        datagen_cfg.task_sampler_config.base_pose_sampling_radius_range = (0.0, 0.55)  # top-down YAM reach ~0.5 m
+        datagen_cfg.task_sampler_config.robot_safety_radius = 0.30  # base half-width 0.275
+        # grasp-collision proxy at the YAM gripper's 75 mm opening (less margin), not the Robotiq's
+        # 80 mm, so grasps around objects too wide for it are filtered out before planning
+        datagen_cfg.policy_config.grasp_width = 0.07
     else:
         raise ValueError
 
@@ -334,7 +345,7 @@ if __name__ == "__main__":
     args.add_argument("--config", type=str, default=None, help="Load a fixed config")
     args.add_argument("--viewer", action="store_true", help="single step")
     args.add_argument(
-        "--robot", type=str, default="droid", help="franka, droid, rum, rby1, yam, or bimanual_yam"
+        "--robot", type=str, default="droid", help="franka, droid, rum, rby1, yam, bimanual_yam, or linearbot"
     )
     args.add_argument(
         "--policy",

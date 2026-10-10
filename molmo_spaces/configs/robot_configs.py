@@ -22,6 +22,7 @@ from molmo_spaces.robots.floating_robotiq import FloatingRobotiqRobot
 from molmo_spaces.robots.floating_rum import FloatingRUMRobot
 from molmo_spaces.robots.franka import FrankaRobot
 from molmo_spaces.robots.i2rt_yam import I2rtYamRobot
+from molmo_spaces.robots.linearbot import LinearBotRobot
 from molmo_spaces.robots.mobile_franka import MobileFrankaRobot
 from molmo_spaces.robots.rby1 import RBY1
 from molmo_spaces.robots.robot_views.abstract import RobotViewFactory
@@ -34,6 +35,7 @@ from molmo_spaces.robots.robot_views.franka_droid_view import (
     FrankaDroidRobotView,
 )
 from molmo_spaces.robots.robot_views.i2rt_yam_view import I2rtYamRobotView
+from molmo_spaces.robots.robot_views.linearbot_view import LinearBotRobotView
 from molmo_spaces.robots.robot_views.mobile_franka_droid_view import MobileFrankaDroidRobotView
 from molmo_spaces.robots.robot_views.rby1_view import RBY1RobotView
 from molmo_spaces.robots.robot_views.rum_gripper_view import FloatingRUMRobotView
@@ -386,6 +388,71 @@ class I2rtYamRobotConfig(BaseRobotConfig):
             assert self.command_mode["gripper"] == "joint_position"
         if "arm" in self.command_mode:
             assert self.command_mode["arm"] in ["joint_position", "joint_rel_position"]
+
+
+class LinearBotRobotConfig(BaseRobotConfig):
+    """i2rt LinearBot: holonomic Flow Base, 1 m vertical lift, two 6-DOF YAM arms on the carriage.
+
+    Published: casters at +-0.20 m, 1.0 m stroke at <=0.3 m/s, 95 kg net. Every other size
+    below is estimated from I2RT's illustrations -- measure the real robot and override.
+    """
+
+    robot_cls: type[LinearBotRobot] | None = LinearBotRobot
+    robot_factory: Callable[[MjData, Any], Robot] | None = LinearBotRobot
+    robot_view_factory: RobotViewFactory | None = LinearBotRobotView
+    robot_namespace: str = "robot_0/"
+    name: str = "i2rt_yam"  # arm meshes come from the YAM asset directory
+    robot_xml_path: Path = Path("yam.xml")
+
+    # --- geometry (metres, robot base frame: +x forward, z up from the floor) ---
+    base_size: list[float] = [0.55, 0.55, 0.30]  # footprint from caster spacing; height guessed
+    column_x: float = -0.18  # lift column sits at the rear of the base (guess)
+    column_width: float = 0.10
+    column_height: float = 1.35  # above the base top (guess)
+    lift_stroke: float = 1.0  # published
+    arm_mount_height: float = 0.40  # arm base above the floor at lift = 0 (guess)
+    arm_mount_x: float = 0.12  # arm bases near the front edge (guess; at -0.06 top-down grasps on counters were out of reach)
+    arm_spacing: float = 0.44  # between arm bases; bimanual YAM uses 0.44, the i2rt station 0.61
+    carriage_mass: float = 3.0
+    head_camera_pose: list[float] = [-0.11, 1.68, 50.0]  # x, z, pitch-down deg (guess)
+    # D405 on the wrist, in link_6: 10 cm off the tool axis, tilted 25 deg toward it (the tilt
+    # is i2rt's yam_station_linear_4310_d405 value; the offset is set by render so both
+    # fingertips show at the image bottom -- that station uses a different gripper)
+    # finger position servo. yam.xml ships kp=100: 1.9 N total grip on a 4 cm block, and
+    # bowls / spatulas slipped out. kp=2000 gives 35 N (the DROID Robotiq model: 256 N). No
+    # published YAM grip force -- calibrate against the real gripper.
+    gripper_kp: float = 2000.0
+    gripper_kd: float = 20.0
+    wrist_camera_pos: list[float] = [0.0, 0.10, 0.03]
+    wrist_camera_quat: list[float] = [0.0, 0.0, 0.9763, 0.2164]
+
+    init_qpos: dict[str, list[float]] = {
+        "lift": [0.4],
+        "right_arm": [0.0, 1.047, 1.047, 0.1, -0.1, 0.0],
+        "right_gripper": [0.0, 0.0],
+        "left_arm": [0.0, 1.047, 1.047, 0.1, -0.1, 0.0],
+        "left_gripper": [0.0, 0.0],
+    }
+    init_qpos_noise_range: dict[str, list[float]] | None = None
+    command_mode: dict[str, str] = {
+        "base": "holo_joint_planar_position",
+        "lift": "joint_position",
+        "arm": "joint_position",
+        "gripper": "joint_position",
+    }
+    gravcomp: bool = True
+    # IK planners hold these: the base drives between manipulation phases, not during them
+    # (whole-body IK has no collision model and pushed the base into counters), and the idle
+    # arm stays put. The first gripper move group (right) is the one planners use.
+    ik_locked_move_groups: list[str] = ["base", "left_arm"]
+
+    # critically damped for ~95 kg / ~8 kg m^2 (base) and ~12 kg (carriage + arms)
+    base_control_params: dict[str, dict[str, float]] = {
+        "base_x_act": {"kp": 25000, "kd": 3100, "ctrlrange": 25},
+        "base_y_act": {"kp": 25000, "kd": 3100, "ctrlrange": 25},
+        "base_theta_act": {"kp": 5000, "kd": 400},
+    }
+    lift_control_params: dict[str, float] = {"kp": 10000, "kd": 700, "damping": 50, "max_force": 2000}
 
 
 class BimanualYamRobotConfig(BaseRobotConfig):

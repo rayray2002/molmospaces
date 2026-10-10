@@ -185,7 +185,10 @@ class MoveGroup(ABC):
         """Control limits (min, max) for each actuator."""
         ctrl_range = np.empty((self.n_actuators, 2))
         for i, act_id in enumerate(self._actuator_ids):
-            ctrl_range[i] = self.mj_model.actuator(act_id).ctrlrange
+            if self.mj_model.actuator_ctrllimited[act_id]:
+                ctrl_range[i] = self.mj_model.actuator(act_id).ctrlrange
+            else:  # an unlimited actuator reports ctrlrange (0, 0); clipping to it zeroes commands
+                ctrl_range[i] = [-np.inf, np.inf]
         return ctrl_range
 
     def integrate_joint_vel(self, joint_pos: np.ndarray, joint_vel: np.ndarray) -> np.ndarray:

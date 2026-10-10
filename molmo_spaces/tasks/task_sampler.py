@@ -1135,6 +1135,15 @@ class BaseMujocoTaskSampler:
             if self._datagen_profiler is not None:
                 self._datagen_profiler.end("task_specific_sample")
 
+        # Sync every controller and the actuator ctrl to the final sampled state. Robot placement
+        # moved the base after randomize_scene reset the controllers, and mj_resetData left ctrl
+        # at zero; planner hold actions read ctrl back, so a stale value drives a mobile base back
+        # to its pre-placement pose and an idle arm to all-zero joints.
+        for robot in self.env.robots:
+            for controller in robot.controllers.values():
+                controller.reset()
+                controller.robot_move_group.ctrl = controller.compute_ctrl_inputs()
+
         # Update robot-mounted camera poses to ensure they reflect the final robot state.
         # This is needed because camera setup may happen before the final mj_forward call,
         # and env.step() (which normally updates cameras) hasn't been called yet.

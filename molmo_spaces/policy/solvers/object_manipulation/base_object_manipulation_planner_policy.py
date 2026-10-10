@@ -538,11 +538,15 @@ class BaseObjectManipulationPlannerPolicy(PlannerPolicy):
         action = self.robot_view.get_noop_ctrl_dict()
         return action
 
+    def _ik_locked_move_groups(self) -> set[str]:
+        """Move groups the IK must hold, e.g. a mobile base and the idle arm (robot config)."""
+        return set(getattr(self.config.robot_config, "ik_locked_move_groups", ()))
+
     def _tcp_to_jp_fn(self, mg_id: str, target_pose: np.ndarray) -> dict[str, Any]:
         kinematics = self.task.env.current_robot.kinematics
 
-        gripper_mgs = set(self.robot_view.get_gripper_movegroup_ids())
-        mgs_except_gripper = [x for x in self.robot_view.move_group_ids() if x not in gripper_mgs]
+        held_mgs = set(self.robot_view.get_gripper_movegroup_ids()) | self._ik_locked_move_groups()
+        mgs_except_gripper = [x for x in self.robot_view.move_group_ids() if x not in held_mgs]
 
         jp = kinematics.ik(
             mg_id,
@@ -582,10 +586,11 @@ class BaseObjectManipulationPlannerPolicy(PlannerPolicy):
             robot_view = self.task.env.current_robot.robot_view
             parallel_kinematics = self.task.env.current_robot.parallel_kinematics
             gripper_mg_id = robot_view.get_gripper_movegroup_ids()[0]
+            locked = self._ik_locked_move_groups()
             jp_dicts = parallel_kinematics.ik(
                 gripper_mg_id,
                 pose,
-                None,
+                [x for x in robot_view.move_group_ids() if x not in locked] if locked else None,
                 robot_view.get_qpos_dict(),
                 robot_view.base.pose,
                 rel_to_base=False,
@@ -599,7 +604,7 @@ class BaseObjectManipulationPlannerPolicy(PlannerPolicy):
             jp_dict = kinematics.ik(
                 gripper_mg_id,
                 pose,
-                robot_view.move_group_ids(),
+                [x for x in robot_view.move_group_ids() if x not in self._ik_locked_move_groups()],
                 robot_view.get_qpos_dict(),
                 base_pose=robot_view.base.pose,
             )
