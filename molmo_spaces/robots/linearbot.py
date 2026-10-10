@@ -18,6 +18,7 @@ from molmo_spaces.controllers.joint_pos import JointPosController
 from molmo_spaces.kinematics.mujoco_kinematics import MlSpacesKinematics
 from molmo_spaces.kinematics.parallel.dummy_parallel_kinematics import DummyParallelKinematics
 from molmo_spaces.robots.bimanual_yam import BimanualYamRobot
+from molmo_spaces.robots.robot_views.linearbot_view import LinearBotGripperGroup
 
 if TYPE_CHECKING:
     from molmo_spaces.configs.abstract_exp_config import MlSpacesExpConfig
@@ -169,6 +170,10 @@ class LinearBotRobot(BimanualYamRobot):
                 grip = spec.actuator(f"{prefix}{side}_gripper_{tip}_tip")
                 grip.gainprm[0] = cfg.gripper_kp
                 grip.biasprm[1:3] = [-cfg.gripper_kp, -cfg.gripper_kd]
+                # yam_ai2.xml stops the fingers with the pads 4 mm apart, so forks, knives and
+                # spoon handles were never squeezed; let them close until the pads meet
+                grip.ctrlrange[1] = LinearBotGripperGroup.CLOSED
+                spec.joint(f"{prefix}{side}_{tip}_finger").range[1] = LinearBotGripperGroup.CLOSED
             link6 = spec.body(f"{prefix}{side}_link_6")
             link6.add_camera(
                 name=f"{prefix}{side}_wrist_camera",

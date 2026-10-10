@@ -65,10 +65,13 @@ class LinearBotLiftGroup(MJCFFrameMixin, SimplyActuatedMoveGroup):
 class LinearBotGripperGroup(MJCFFrameMixin, GripperGroup):
     """The 95 mm linear gripper of yam_ai2.xml: two fingers, one position servo each.
 
-    Finger joints run from 0 (closed) to -0.0485 (open); the tip pads are then ~97 mm apart.
+    Finger joints run from -0.0485 (open, pads ~101 mm apart) through 0 (yam_ai2.xml's closed
+    end, pads still 4 mm apart) to CLOSED, where LinearBotRobot lets the pads meet.
     """
 
     OPEN = -0.0475  # actuator ctrlrange end
+    CLOSED = 0.002
+    PAD_GAP_AT_ZERO = 0.004
 
     def __init__(self, mj_data: MjData, side: Literal["left", "right"], base, namespace: str = ""):
         model = mj_data.model
@@ -87,15 +90,16 @@ class LinearBotGripperGroup(MJCFFrameMixin, GripperGroup):
         return "site"
 
     def set_gripper_ctrl_open(self, open: bool) -> None:
-        self.ctrl = [self.OPEN, self.OPEN] if open else [0.0, 0.0]
+        self.ctrl = [self.OPEN, self.OPEN] if open else [self.CLOSED, self.CLOSED]
 
     @property
     def inter_finger_dist_range(self) -> tuple[float, float]:
-        return 0.0, 0.097
+        return 0.0, self.PAD_GAP_AT_ZERO - 2 * self.OPEN
 
     @property
     def inter_finger_dist(self) -> float:
-        return float(np.abs(self.joint_pos).sum())
+        """Gap between the two tip pads."""
+        return float(max(0.0, self.PAD_GAP_AT_ZERO - self.joint_pos.sum()))
 
     @property
     def root_frame_to_world(self) -> np.ndarray:
