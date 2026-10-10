@@ -164,6 +164,16 @@ class LinearBotRobot(BimanualYamRobot):
 
         for side, y in [("left", cfg.arm_spacing / 2), ("right", -cfg.arm_spacing / 2)]:
             arm_spec = cls._load_robot_spec(cfg, strip_meshes=strip_meshes)
+            # The 4 mm tip pads tunnel through objects under default (soft) contact once the
+            # finger servo is stiff enough to grip: a 20 mm block squeezed at kp 600+ ended with
+            # the pads past each other. Robotiq-style pad contact (as in MolmoSpaces' 2f85.xml)
+            # holds the true width at kp 2000 with 40 N.
+            for g in arm_spec.geoms:
+                if "tip_collider" in g.name:
+                    g.solref[:] = [0.004, 1]
+                    g.solimp[:3] = [0.95, 0.99, 0.001]
+                    g.priority = 1
+                    g.friction[0] = 1.0
             frame = carriage.add_frame(pos=[cfg.arm_mount_x, y, 0])
             frame.attach_body(arm_spec.body("arm"), f"{prefix}{side}_", "")
             for tip in ["left", "right"]:

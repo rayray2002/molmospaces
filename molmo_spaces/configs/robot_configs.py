@@ -420,8 +420,8 @@ class LinearBotRobotConfig(BaseRobotConfig):
     # D405 on the wrist, in link_6: 10 cm off the tool axis, tilted 25 deg toward it (the tilt
     # is i2rt's yam_station_linear_4310_d405 value; the offset is set by render so both
     # fingertips show at the image bottom -- that station uses a different gripper)
-    # finger position servo. yam.xml ships kp=100: 1.9 N total grip on a 4 cm block, and
-    # bowls / spatulas slipped out. kp=2000 gives 35 N (the DROID Robotiq model: 256 N). No
+    # finger position servo (per finger). Stock kp=100 grips with ~2 N; kp=2000 with stiff pad
+    # contact squeezes a 20 mm block with 40 N (the DROID Robotiq model: 256 N on 40 mm). No
     # published YAM grip force -- calibrate against the real gripper.
     gripper_kp: float = 2000.0
     gripper_kd: float = 20.0
