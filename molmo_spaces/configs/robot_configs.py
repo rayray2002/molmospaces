@@ -470,13 +470,14 @@ def apply_linearbot_datagen(cfg) -> None:
     cfg.robot_config = LinearBotRobotConfig()
     cfg.camera_config = LinearBotCameraSystem()
     tsc = cfg.task_sampler_config
-    # floor-standing mobile base: sample around the object like RBY1, not on a pedestal. 0.55 m:
-    # top-down YAM reach ~0.5 m; 0.7 m placed more episodes but lost more of them (47% vs 65%
-    # pick-and-place success, ithor 1-11, seed 3)
-    tsc.base_pose_sampling_radius_range = (0.0, 0.55)
     tsc.robot_safety_radius = 0.30  # base half-width 0.275
-    # grasp-collision proxy at the linear gripper's ~97 mm opening less margin
-    cfg.policy_config.grasp_width = 0.09
+    if "grasp_width" in type(cfg.policy_config).model_fields:  # manipulation planners
+        # floor-standing mobile base: sample around the object like RBY1, not on a pedestal. 0.55 m:
+        # top-down YAM reach ~0.5 m; 0.7 m placed more episodes but lost more of them (47% vs 65%
+        # pick-and-place success, ithor 1-11, seed 3). Navigation keeps its own (far) start radius.
+        tsc.base_pose_sampling_radius_range = (0.0, 0.55)
+        # grasp-collision proxy at the linear gripper's ~97 mm opening less margin
+        cfg.policy_config.grasp_width = 0.09
 
 
 class BimanualYamRobotConfig(BaseRobotConfig):

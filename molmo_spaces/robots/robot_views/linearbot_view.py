@@ -20,6 +20,7 @@ from molmo_spaces.robots.robot_views.abstract import (
     SimplyActuatedMoveGroup,
 )
 from molmo_spaces.robots.robot_views.bimanual_yam_view import BimanualYamArmGroup
+from molmo_spaces.utils.linalg_utils import normalize_ang_error
 from molmo_spaces.utils.mj_model_and_data_utils import body_pose
 
 
@@ -133,3 +134,13 @@ class LinearBotRobotView(RobotView):
     @property
     def base(self) -> LinearBotBaseGroup:
         return self._move_groups["base"]
+
+    # navigation planners (AStarNavToObjPolicy) track [x, y, theta] base waypoints, as on RBY1
+    def distance_to(self, move_group_ids: list[str], target_pose: list) -> float:
+        assert len(target_pose) == 3, f"Expected [x, y, theta] pose, got {target_pose}"
+        q = np.concatenate([self.get_move_group(m).joint_pos for m in move_group_ids])
+        return float(np.linalg.norm([q[0] - target_pose[0], q[1] - target_pose[1],
+                                     normalize_ang_error(q[2] - target_pose[2])]))
+
+    def is_close_to(self, move_group_ids: list[str], target_pose: list, threshold: float = 0.05) -> bool:
+        return self.distance_to(move_group_ids, target_pose) < threshold
