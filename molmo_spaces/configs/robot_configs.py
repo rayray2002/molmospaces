@@ -424,8 +424,10 @@ class LinearBotRobotConfig(BaseRobotConfig):
     # contact squeezes a 20 mm block with 40 N (the DROID Robotiq model: 256 N on 40 mm). No
     # published YAM grip force -- calibrate against the real gripper.
     # grasp site moved this far back toward the wrist (m): the YAM pads sit ~2 cm further back from
-    # their grasp site than the Robotiq pads the grasp libraries were made for
-    tcp_depth: float = 0.0
+    # their grasp site than the Robotiq pads the grasp libraries were made for, and closed above
+    # flat handles. 0.02 vs 0: 49/65 vs 44/72 planner successes (pick + pick-and-place, ithor,
+    # seeds 2-3); DROID on the same tasks 119/153
+    tcp_depth: float = 0.02
     gripper_kp: float = 2000.0
     gripper_kd: float = 20.0
     wrist_camera_pos: list[float] = [0.0, 0.10, 0.03]
