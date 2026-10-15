@@ -136,3 +136,26 @@ class BimanualYamPiPolicyConfig(BasePolicyConfig):
 
             self.policy_cls = BimanualYamPiPolicy
             self.policy_factory = make_lenient(BimanualYamPiPolicy)
+
+
+class LinearBotPiPolicyConfig(BimanualYamPiPolicyConfig):
+    """BimanualYamPiPolicy for the LinearBot: same 14-dim two-arm interface, head camera as "top".
+
+    The base and lift are not commanded (held stationary), so a policy trained on bimanual YAM
+    data drives only the arms and grippers.
+    """
+
+    name: str = "linearbot_pi"
+    camera_mapping: dict = dict(
+        left_wrist_camera="observation.images.left",
+        right_wrist_camera="observation.images.right",
+        head_camera="observation.images.top",
+    )
+
+    def model_post_init(self, __context) -> None:
+        BasePolicyConfig.model_post_init(self, __context)
+        if self.policy_cls is None:
+            from molmo_spaces.policy.learned_policy.linearbot_pi_policy import LinearBotPiPolicy
+
+            self.policy_cls = LinearBotPiPolicy
+            self.policy_factory = make_lenient(LinearBotPiPolicy)

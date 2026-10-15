@@ -14,6 +14,7 @@ from molmo_spaces.configs.base_open_task_configs import OpeningBaseConfig, Closi
 from molmo_spaces.configs.base_pick_config import PickBaseConfig
 from molmo_spaces.configs.policy_configs_baselines import (
     BimanualYamPiPolicyConfig,
+    LinearBotPiPolicyConfig,
     PiPolicyConfig,
     TeleopPolicyConfig,
 )
@@ -94,7 +95,7 @@ class MyRolloutRunner(ParallelRolloutRunner):
         # if observation[0]["object_image_points"]["pickup_obj"]["exo_camera_1"] == []:
         #   raise ValueError("Pickup object not visible in exo_camera_1")
 
-        if policy.__class__.__name__ in ("PI_Policy", "RUM_Policy", "BimanualYamPiPolicy"):
+        if policy.__class__.__name__ in ("PI_Policy", "RUM_Policy", "BimanualYamPiPolicy", "LinearBotPiPolicy"):
             policy.prepare_model()
         if viewer is not None:
             viewer.sync()
@@ -261,6 +262,8 @@ def get_policy_config(s: str, robot: str = None):
         # Use BimanualYamPiPolicyConfig for bimanual_yam robot
         if robot == "bimanual_yam":
             return BimanualYamPiPolicyConfig()
+        if robot == "linearbot":
+            return LinearBotPiPolicyConfig()
         return PiPolicyConfig()
     elif s == "rum":
         return RumPolicyConfig()

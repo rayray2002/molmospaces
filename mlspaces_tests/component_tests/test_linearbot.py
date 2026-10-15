@@ -54,3 +54,21 @@ def test_ik_reaches_fk_target_with_base_locked():
     assert np.allclose(sol["base"], q["base"])
     reached = kin.fk(sol, view.base.pose)["right_gripper"]
     assert np.linalg.norm(reached[:3, 3] - target[:3, 3]) < 1e-3
+
+
+def test_linearbot_pi_policy_io():
+    """Model vector <-> LinearBot action dict, no server needed."""
+    from molmo_spaces.configs.policy_configs_baselines import LinearBotPiPolicyConfig
+    from molmo_spaces.policy.learned_policy.linearbot_pi_policy import LinearBotPiPolicy
+
+    assert LinearBotPiPolicyConfig().policy_cls is LinearBotPiPolicy
+    pol = LinearBotPiPolicy.__new__(LinearBotPiPolicy)
+    pol.grasping_type = "binary"
+    pol.current_buffer_index = 0
+    out = np.concatenate([np.arange(6) * 0.1, [1.0], np.arange(6) * -0.1, [0.0]])
+    act = pol.model_output_to_action(out)
+    assert set(act) == {"left_arm", "right_arm", "left_gripper", "right_gripper"}  # base, lift held
+    assert np.allclose(act["left_gripper"], [-0.0475, -0.0475])  # open
+    assert np.allclose(act["right_gripper"], [0.002, 0.002])  # closed
+    assert pol._normalize_gripper(np.array([-0.0475, -0.0475])) == 1.0
+    assert pol._normalize_gripper(np.array([0.002, 0.002])) == 0.0

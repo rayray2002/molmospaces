@@ -43,6 +43,12 @@ class BimanualYamPiPolicy(InferencePolicy):
 
     # Gripper normalization constant (YAM gripper range is 0.0 to 0.041)
     GRIPPER_MAX = 0.041
+    # MuJoCo camera name -> short key build_dataset_frame expects
+    CAMERA_SHORT_KEYS = {
+        "left_wrist_camera": "left",
+        "right_wrist_camera": "right",
+        "exo_camera": "top",
+    }
 
     def __init__(self, exp_config: MlSpacesExpConfig) -> None:
         """Initialize the policy.
@@ -204,12 +210,7 @@ class BimanualYamPiPolicy(InferencePolicy):
         model_input = {}
 
         # Process camera images - use short keys (build_dataset_frame strips "observation.images." prefix)
-        camera_short_keys = {
-            "left_wrist_camera": "left",
-            "right_wrist_camera": "right",
-            "exo_camera": "top",
-        }
-        for mj_cam, short_key in camera_short_keys.items():
+        for mj_cam, short_key in self.CAMERA_SHORT_KEYS.items():
             if mj_cam in obs:
                 model_input[short_key] = obs[mj_cam]
 
