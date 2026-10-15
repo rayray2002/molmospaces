@@ -99,7 +99,9 @@ class LinearBotRobot(BimanualYamRobot):
         base = spec.worldbody.add_body(name=f"{prefix}base", pos=pos, quat=quat)
         base.add_site(name=f"{prefix}base_site")
         bx, by, bz = cfg.base_size
-        clearance = 0.01  # keep the base box off the floor so the planar joints slide freely
+        # keep the base box off the floor so the planar joints slide freely; 3 cm (the real base
+        # rides on casters) also clears floors a little above z=0 (anysim's exported kitchens: 7 mm)
+        clearance = 0.03
         base.add_geom(
             type=mjtGeom.mjGEOM_BOX,
             size=[bx / 2, by / 2, (bz - clearance) / 2],
