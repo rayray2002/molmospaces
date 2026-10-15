@@ -6,10 +6,11 @@ This module contains:
 - Robot-specific configs: FrankaRobotConfig, RBY1Config, FloatingRUMRobotConfig
 """
 
+import functools
 from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import mujoco as mj
 import numpy as np
@@ -23,6 +24,7 @@ from molmo_spaces.robots.floating_rum import FloatingRUMRobot
 from molmo_spaces.robots.franka import FrankaRobot
 from molmo_spaces.robots.g1 import G1Robot
 from molmo_spaces.robots.i2rt_yam import I2rtYamRobot
+from molmo_spaces.robots.linearbot import LinearBotRobot
 from molmo_spaces.robots.mobile_franka import MobileFrankaRobot
 from molmo_spaces.robots.rby1 import RBY1
 from molmo_spaces.robots.robot_views.abstract import RobotViewFactory
@@ -36,6 +38,7 @@ from molmo_spaces.robots.robot_views.franka_droid_view import (
 )
 from molmo_spaces.robots.robot_views.g1_view import G1RobotView
 from molmo_spaces.robots.robot_views.i2rt_yam_view import I2rtYamRobotView
+from molmo_spaces.robots.robot_views.linearbot_view import LinearBotRobotView
 from molmo_spaces.robots.robot_views.mobile_franka_droid_view import MobileFrankaDroidRobotView
 from molmo_spaces.robots.robot_views.rby1_view import RBY1RobotView
 from molmo_spaces.robots.robot_views.rum_gripper_view import FloatingRUMRobotView
@@ -513,6 +516,99 @@ class I2rtYamRobotConfig(BaseRobotConfig):
             assert self.command_mode["gripper"] == "joint_position"
         if "arm" in self.command_mode:
             assert self.command_mode["arm"] in ["joint_position", "joint_rel_position"]
+
+
+class LinearBotRobotConfig(BaseRobotConfig):
+    """i2rt LinearBot: holonomic Flow Base, 1 m vertical lift, two 6-DOF YAM arms on the carriage.
+
+    Published: casters at +-0.20 m, 1.0 m stroke at <=0.3 m/s, 95 kg net. Every other size
+    below is estimated from I2RT's illustrations -- measure the real robot and override.
+    """
+
+    robot_cls: type[LinearBotRobot] | None = LinearBotRobot
+    robot_factory: Callable[[mj.MjData, Any], Robot] | None = LinearBotRobot
+    robot_view_factory: RobotViewFactory | None = LinearBotRobotView
+    robot_namespace: str = "robot_0/"
+    name: str = "i2rt_yam"  # arm meshes come from the YAM asset directory
+    # AI2's YAM variant with the 95 mm linear gripper (the one I2RT ships), flat tip pads and one
+    # servo per finger; yam.xml has an older 75 mm gripper with capsule tips
+    robot_xml_path: Path = Path("yam_ai2.xml")
+
+    # --- geometry (metres, robot base frame: +x forward, z up from the floor) ---
+    base_size: list[float] = [0.55, 0.55, 0.30]  # footprint from caster spacing; height guessed
+    column_x: float = -0.18  # lift column sits at the rear of the base (guess)
+    column_width: float = 0.10
+    column_height: float = 1.35  # above the base top (guess)
+    lift_stroke: float = 1.0  # published
+    arm_mount_height: float = 0.40  # arm base above the floor at lift = 0 (guess)
+    arm_mount_x: float = 0.12  # arm bases near the front edge (guess; at -0.06 top-down grasps on counters were out of reach)
+    arm_spacing: float = 0.44  # between arm bases; bimanual YAM uses 0.44, the i2rt station 0.61
+    carriage_mass: float = 3.0
+    head_camera_pose: list[float] = [-0.11, 1.68, 50.0]  # x, z, pitch-down deg (guess)
+    # D405 on the wrist, in link_6: 10 cm off the tool axis, tilted 25 deg toward it (the tilt
+    # is i2rt's yam_station_linear_4310_d405 value; the offset is set by render so both
+    # fingertips show at the image bottom -- that station uses a different gripper)
+    # finger position servo (per finger). Stock kp=100 grips with ~2 N; kp=2000 with stiff pad
+    # contact squeezes a 20 mm block with 40 N (the DROID Robotiq model: 256 N on 40 mm). No
+    # published YAM grip force -- calibrate against the real gripper.
+    # grasp site moved this far back toward the wrist (m): the YAM pads sit ~2 cm further back from
+    # their grasp site than the Robotiq pads the grasp libraries were made for, and closed above
+    # flat handles. 0.02 vs 0: 49/65 vs 44/72 planner successes (pick + pick-and-place, ithor,
+    # seeds 2-3); DROID on the same tasks 119/153
+    tcp_depth: float = 0.02
+    gripper_kp: float = 2000.0
+    gripper_kd: float = 20.0
+    wrist_camera_pos: list[float] = [0.0, 0.10, 0.03]
+    wrist_camera_quat: list[float] = [0.0, 0.0, 0.9763, 0.2164]
+
+    init_qpos: dict[str, list[float]] = {
+        "lift": [0.4],
+        "right_arm": [0.0, 1.047, 1.047, 0.1, -0.1, 0.0],
+        "right_gripper": [0.0, 0.0],
+        "left_arm": [0.0, 1.047, 1.047, 0.1, -0.1, 0.0],
+        "left_gripper": [0.0, 0.0],
+    }
+    # arm the single-arm planners drive; the other arm holds (bimanual code uses both)
+    active_arm: Literal["right", "left"] = "right"
+    init_qpos_noise_range: dict[str, list[float]] | None = None
+    command_mode: dict[str, str] = {
+        "base": "holo_joint_planar_position",
+        "lift": "joint_position",
+        "arm": "joint_position",
+        "gripper": "joint_position",
+    }
+    gravcomp: bool = True
+
+    # critically damped for ~95 kg / ~8 kg m^2 (base) and ~12 kg (carriage + arms)
+    base_control_params: dict[str, dict[str, float]] = {
+        "base_x_act": {"kp": 25000, "kd": 3100, "ctrlrange": 25},
+        "base_y_act": {"kp": 25000, "kd": 3100, "ctrlrange": 25},
+        "base_theta_act": {"kp": 5000, "kd": 400},
+    }
+    lift_control_params: dict[str, float] = {"kp": 10000, "kd": 700, "damping": 50, "max_force": 2000}
+
+    def model_post_init(self, __context) -> None:
+        super().model_post_init(__context)
+        if self.active_arm != "right" and self.robot_view_factory is LinearBotRobotView:
+            self.robot_view_factory = functools.partial(LinearBotRobotView, active_arm=self.active_arm)
+
+
+def apply_linearbot_datagen(cfg, robot_config: "LinearBotRobotConfig | None" = None) -> None:
+    """Put the LinearBot rig on a planner datagen config (pick / pick-and-place / open-close):
+    floor base sampled close to the object, its footprint as safety radius, linear-gripper width."""
+    from molmo_spaces.configs.camera_configs import LinearBotCameraSystem
+
+    cfg.robot_config = robot_config or LinearBotRobotConfig()
+    cfg.camera_config = LinearBotCameraSystem()
+    tsc = cfg.task_sampler_config
+    tsc.robot_safety_radius = 0.30  # base half-width 0.275
+    if "grasp_width" in type(cfg.policy_config).model_fields:  # manipulation planners
+        # floor-standing mobile base: sample around the object like RBY1, not on a pedestal. 0.55 m:
+        # top-down YAM reach ~0.5 m; 0.7 m placed more episodes but lost more of them (47% vs 65%
+        # pick-and-place success, ithor 1-11, seed 3). Navigation keeps its own (far) start radius.
+        tsc.base_pose_sampling_radius_range = (0.0, 0.55)
+        # grasp-collision proxy at the linear gripper's ~97 mm opening less margin
+        cfg.policy_config.grasp_width = 0.09
 
 
 class BimanualYamRobotConfig(BaseRobotConfig):

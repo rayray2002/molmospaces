@@ -79,7 +79,18 @@ class ExocentricCameraSpec(BaseModel):
     record_depth: bool = False  # Whether to record depth images for this camera
 
 
-CameraSpec = RobotMountedCameraSpec | ExocentricCameraSpec
+class MjcfCameraSpec(BaseModel):
+    """Specification for a camera defined in the robot MJCF (e.g. LinearBot's head and wrist cameras)."""
+
+    name: str
+    type: Literal["mjcf"] = "mjcf"
+    mjcf_name: str
+    robot_namespace: str | None = "robot_0/"
+    fov: float | None = None
+    record_depth: bool = False
+
+
+CameraSpec = RobotMountedCameraSpec | ExocentricCameraSpec | MjcfCameraSpec
 
 
 class SceneModificationsSpec(BaseModel):

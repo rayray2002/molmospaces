@@ -15,6 +15,8 @@ from molmo_spaces.configs.base_open_task_configs import OpeningBaseConfig, Closi
 from molmo_spaces.configs.base_pick_config import PickBaseConfig
 from molmo_spaces.configs.policy_configs_baselines import (
     BimanualYamPiPolicyConfig,
+    LinearBotOpenpiPolicyConfig,
+    LinearBotPiPolicyConfig,
     PiPolicyConfig,
     TeleopPolicyConfig,
 )
@@ -45,6 +47,8 @@ from molmo_spaces.configs.robot_configs import (
 )
 from molmo_spaces.configs.robot_configs import (
     BimanualYamRobotConfig,
+    LinearBotRobotConfig,
+    apply_linearbot_datagen,
     FloatingRUMRobotConfig,
     FrankaRobotConfig,
     G1Config,
@@ -101,7 +105,7 @@ class MyRolloutRunner(ParallelRolloutRunner):
         # if observation[0]["object_image_points"]["pickup_obj"]["exo_camera_1"] == []:
         #   raise ValueError("Pickup object not visible in exo_camera_1")
 
-        if policy.__class__.__name__ in ("PI_Policy", "RUM_Policy", "BimanualYamPiPolicy"):
+        if policy.__class__.__name__ in ("PI_Policy", "RUM_Policy", "BimanualYamPiPolicy", "LinearBotPiPolicy"):
             policy.prepare_model()
         if viewer is not None:
             viewer.sync()
@@ -149,14 +153,16 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
     robot = args.robot  #  droid or rum
     single_step = args.single_step
 
+    # the base configs require a robot and an output dir; both are set further down
+    req = dict(robot_config=FrankaRobotConfig(), output_dir=ASSETS_DIR / "datagen")
     if task_type == "pick":
-        datagen_cfg = PickBaseConfig()
+        datagen_cfg = PickBaseConfig(**req)
         datagen_cfg.policy_config = PickPlannerPolicyConfig()
     elif task_type == "open":
-        datagen_cfg = OpeningBaseConfig()
+        datagen_cfg = OpeningBaseConfig(**req)
         datagen_cfg.policy_config = OpenClosePlannerPolicyConfig()
     elif task_type == "close":
-        datagen_cfg = ClosingBaseConfig()
+        datagen_cfg = ClosingBaseConfig(**req)
         datagen_cfg.policy_config = OpenClosePlannerPolicyConfig()
     elif task_type == "pick_and_place":
         datagen_cfg = FrankaPickAndPlaceDroidDataGenConfig()
@@ -171,10 +177,10 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
         datagen_cfg = PackingDataGenConfig()
         datagen_cfg.policy_config = PickAndPlacePlannerPolicyConfig()
     elif task_type == "nav_to_obj":
-        datagen_cfg = NavToObjBaseConfig()
+        datagen_cfg = NavToObjBaseConfig(**req)
         datagen_cfg.policy_config = AStarNavToObjPolicyConfig()
     elif task_type == "base_motion":
-        datagen_cfg = BaseMotionBaseConfig()
+        datagen_cfg = BaseMotionBaseConfig(**req)
         datagen_cfg.policy_config = AStarNavToObjPolicyConfig()
     else:
         raise ValueError(f"Invalid task type: {task_type}")
@@ -262,6 +268,9 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
     elif robot == "bimanual_yam":
         datagen_cfg.robot_config = BimanualYamRobotConfig()
         datagen_cfg.camera_config = BimanualYamCameraSystem()
+    elif robot == "linearbot":
+        datagen_cfg.robot_config = LinearBotRobotConfig(active_arm=getattr(args, "arm", "right"))
+        apply_linearbot_datagen(datagen_cfg, robot_config=datagen_cfg.robot_config)
     else:
         raise ValueError
 
@@ -279,7 +288,11 @@ def get_policy_config(s: str, robot: str = None):
         # Use BimanualYamPiPolicyConfig for bimanual_yam robot
         if robot == "bimanual_yam":
             return BimanualYamPiPolicyConfig()
+        if robot == "linearbot":
+            return LinearBotPiPolicyConfig()
         return PiPolicyConfig()
+    elif s == "openpi":  # openpi websocket server (scripts/serve_policy.py)
+        return LinearBotOpenpiPolicyConfig() if robot == "linearbot" else PiPolicyConfig()
     elif s == "rum":
         return RumPolicyConfig()
     elif s == "teleop":
@@ -386,17 +399,21 @@ def main(args: argparse.ArgumentParser) -> None:
 
     # Overload policy
     policy = None
-    if args.policy in ("pi", "rum", "teleop"):
+    if args.policy in ("pi", "openpi", "rum", "teleop"):
         if args.policy == "rum":
             exp_config.policy_dt_ms = 500
             exp_config.task_horizon = 80
-        elif args.policy == "pi":
+        elif args.policy in ("pi", "openpi"):
             exp_config.policy_dt_ms = 500
             exp_config.task_horizon = 300
         elif args.policy == "teleop":
             exp_config.policy_dt_ms = 40  # More responsive for teleoperation
             exp_config.task_horizon = 1000
         exp_config.policy_config = get_policy_config(args.policy, robot=args.robot)
+        if args.policy_host or args.policy_port:
+            rc = dict(exp_config.policy_config.remote_config or {})
+            rc.update({k: v for k, v in (("host", args.policy_host), ("port", args.policy_port)) if v})
+            exp_config.policy_config.remote_config = rc
         policy = exp_config.policy_config.policy_factory(exp_config, None)
     elif args.policy == "planner":
         pass
@@ -427,15 +444,20 @@ if __name__ == "__main__":
         "--robot",
         type=str,
         default="droid",
-        help="franka, droid, rum, rby1, g1, yam, or bimanual_yam",
+        help="franka, droid, rum, rby1, g1, yam, bimanual_yam, or linearbot",
     )
     args.add_argument(
         "--policy",
         type=str,
         default="planner",
-        choices=["planner", "pi", "rum", "teleop"],
+        choices=["planner", "pi", "openpi", "rum", "teleop"],
         help="policy to use: planner, pi, rum, or teleop",
     )
+
+    args.add_argument("--arm", choices=["right", "left"], default="right",
+                      help="linearbot: arm the single-arm planners drive")
+    args.add_argument("--policy_host", type=str, default=None, help="learned-policy server host")
+    args.add_argument("--policy_port", type=int, default=None, help="learned-policy server port")
 
     # Arguments below ONLY used for policy from scratch (no eval or config given)
     args.add_argument(

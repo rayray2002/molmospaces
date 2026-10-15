@@ -80,3 +80,18 @@ class JointRelPosController(AbstractPositionController):
     def reset(self) -> None:
         """Reset the controller to its initial state, clearing any internal state or targets"""
         self.set_to_stationary()  # Explicit reset to stationary mode
+
+
+class BodyFrameRelPlanarController(JointRelPosController):
+    """Holonomic base on planar x / y / theta joints, commanded like a real mobile base: the target
+    [dx, dy, dtheta] is a step in the robot's own frame (x forward, y left), rotated into the world
+    joint frame by the current heading."""
+
+    def set_target(self, target: np.ndarray) -> None:
+        dx, dy, dth = np.asarray(target, float)
+        mg = self.robot_move_group
+        pose = mg.pose  # world pose of the base: heading from it, not from the theta joint
+        step_w = pose[:3, 0] * dx + pose[:3, 1] * dy
+        # the x / y slide joints' world axes (the robot may be inserted rotated)
+        ax_x, ax_y = (mg.mj_data.xaxis[j] for j in mg._joint_ids[:2])
+        super().set_target(np.array([step_w @ ax_x, step_w @ ax_y, dth]))

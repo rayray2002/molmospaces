@@ -29,6 +29,7 @@ from molmo_spaces.configs.abstract_exp_config import MlSpacesExpConfig
 from molmo_spaces.configs.camera_configs import (
     CameraSystemConfig,
     FixedExocentricCameraConfig,
+    MjcfCameraConfig,
     RobotMountedCameraConfig,
 )
 from molmo_spaces.configs.task_configs import (
@@ -51,6 +52,7 @@ from molmo_spaces.evaluation.benchmark_schema import (
     DoorOpeningTaskSpec,
     EpisodeSpec,
     ExocentricCameraSpec,
+    MjcfCameraSpec,
     NavToObjTaskSpec,
     OpenCloseTaskSpec,
     PickAndPlaceColorTaskSpec,
@@ -131,6 +133,15 @@ def camera_spec_to_config(
     This converts them to the internal camera config classes used by the
     camera manager.
     """
+    if isinstance(spec, MjcfCameraSpec) or (isinstance(spec, dict) and spec.get("type") == "mjcf"):
+        d = spec if isinstance(spec, dict) else spec.model_dump()
+        return MjcfCameraConfig(
+            name=d["name"],
+            mjcf_name=d["mjcf_name"],
+            robot_namespace=d.get("robot_namespace", "robot_0/"),
+            fov=d.get("fov"),
+            record_depth=d.get("record_depth", False),
+        )
     if isinstance(spec, RobotMountedCameraSpec) or (
         isinstance(spec, dict) and spec.get("type") == "robot_mounted"
     ):
@@ -435,6 +446,8 @@ class JsonEvalTaskSampler(BaseMujocoTaskSampler):
                         fov=cam_spec.get("fov"),
                         record_depth=cam_spec.get("record_depth", False),
                     )
+                elif cam_type == "mjcf":
+                    cam_config = camera_spec_to_config(cam_spec)
                 else:
                     raise ValueError(f"Unknown camera type in spec: {cam_type}")
             else:

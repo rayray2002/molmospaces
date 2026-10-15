@@ -1041,6 +1041,37 @@ class BimanualYamCameraSystem(CameraSystemConfig):
     ]
 
 
+class LinearBotCameraSystem(CameraSystemConfig):
+    """i2rt LinearBot: head camera on top of the lift column + a D405 on each wrist.
+
+    All three are MJCF cameras added by LinearBotRobot.add_robot_to_scene. The head camera
+    moves with the base, not the lift; placement requires it to see the task objects.
+    """
+
+    img_resolution: tuple[int, int] = (640, 360)
+    cameras: list[AllCameraTypes] = [
+        MjcfCameraConfig(
+            name="head_camera",
+            mjcf_name="head_camera",
+            robot_namespace="robot_0/",
+            fov=58.0,
+            visibility_constraints={"__task_objects__": 0.001},
+        ),
+        MjcfCameraConfig(
+            name="right_wrist_camera",
+            mjcf_name="right_wrist_camera",
+            robot_namespace="robot_0/",
+            fov=58.0,
+        ),
+        MjcfCameraConfig(
+            name="left_wrist_camera",
+            mjcf_name="left_wrist_camera",
+            robot_namespace="robot_0/",
+            fov=58.0,
+        ),
+    ]
+
+
 class FrankaEvalCameraSystem(CameraSystemConfig):
     """Unified Franka eval camera system with progressive perturbation (0-100 level).
 
