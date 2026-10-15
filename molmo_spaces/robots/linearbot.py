@@ -184,6 +184,13 @@ class LinearBotRobot(BimanualYamRobot):
                 # spoon handles were never squeezed; let them close until the pads meet
                 grip.ctrlrange[1] = LinearBotGripperGroup.CLOSED
                 spec.joint(f"{prefix}{side}_{tip}_finger").range[1] = LinearBotGripperGroup.CLOSED
+            if cfg.tcp_depth:
+                # planners put the grasp site on the grasp pose; moving it back along its own -z
+                # (toward the wrist) sends the pads that much deeper around the object
+                site = spec.site(f"{prefix}{side}_grasp_site")
+                shift = np.zeros(3)
+                mujoco.mju_rotVecQuat(shift, np.array([0.0, 0.0, -cfg.tcp_depth]), np.asarray(site.quat, float))
+                site.pos = np.asarray(site.pos, float) + shift
             link6 = spec.body(f"{prefix}{side}_link_6")
             link6.add_camera(
                 name=f"{prefix}{side}_wrist_camera",

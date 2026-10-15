@@ -423,6 +423,9 @@ class LinearBotRobotConfig(BaseRobotConfig):
     # finger position servo (per finger). Stock kp=100 grips with ~2 N; kp=2000 with stiff pad
     # contact squeezes a 20 mm block with 40 N (the DROID Robotiq model: 256 N on 40 mm). No
     # published YAM grip force -- calibrate against the real gripper.
+    # grasp site moved this far back toward the wrist (m): the YAM pads sit ~2 cm further back from
+    # their grasp site than the Robotiq pads the grasp libraries were made for
+    tcp_depth: float = 0.0
     gripper_kp: float = 2000.0
     gripper_kd: float = 20.0
     wrist_camera_pos: list[float] = [0.0, 0.10, 0.03]
@@ -455,6 +458,23 @@ class LinearBotRobotConfig(BaseRobotConfig):
         "base_theta_act": {"kp": 5000, "kd": 400},
     }
     lift_control_params: dict[str, float] = {"kp": 10000, "kd": 700, "damping": 50, "max_force": 2000}
+
+
+def apply_linearbot_datagen(cfg) -> None:
+    """Put the LinearBot rig on a planner datagen config (pick / pick-and-place / open-close):
+    floor base sampled close to the object, its footprint as safety radius, linear-gripper width."""
+    from molmo_spaces.configs.camera_configs import LinearBotCameraSystem
+
+    cfg.robot_config = LinearBotRobotConfig()
+    cfg.camera_config = LinearBotCameraSystem()
+    tsc = cfg.task_sampler_config
+    # floor-standing mobile base: sample around the object like RBY1, not on a pedestal. 0.55 m:
+    # top-down YAM reach ~0.5 m; 0.7 m placed more episodes but lost more of them (47% vs 65%
+    # pick-and-place success, ithor 1-11, seed 3)
+    tsc.base_pose_sampling_radius_range = (0.0, 0.55)
+    tsc.robot_safety_radius = 0.30  # base half-width 0.275
+    # grasp-collision proxy at the linear gripper's ~97 mm opening less margin
+    cfg.policy_config.grasp_width = 0.09
 
 
 class BimanualYamRobotConfig(BaseRobotConfig):

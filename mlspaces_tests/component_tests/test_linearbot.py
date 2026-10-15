@@ -10,8 +10,8 @@ from molmo_spaces.controllers.joint_pos import JointPosController
 from molmo_spaces.robots.linearbot import LinearBotKinematics, LinearBotRobot
 
 
-def _build(yaw: float = 0.0):
-    cfg = LinearBotRobotConfig()
+def _build(yaw: float = 0.0, **cfg_kw):
+    cfg = LinearBotRobotConfig(**cfg_kw)
     spec = MjSpec()
     spec.worldbody.add_geom(name="floor", type=mjtGeom.mjGEOM_PLANE, size=[5, 5, 0.1])
     quat = R.from_euler("z", yaw).as_quat(scalar_first=True)
@@ -72,3 +72,16 @@ def test_linearbot_pi_policy_io():
     assert np.allclose(act["right_gripper"], [0.002, 0.002])  # closed
     assert pol._normalize_gripper(np.array([-0.0475, -0.0475])) == 1.0
     assert pol._normalize_gripper(np.array([0.002, 0.002])) == 0.0
+
+
+def test_tcp_depth_moves_grasp_site_toward_wrist():
+    sites = {}
+    for depth in (0.0, 0.02):
+        _, model, data, _ = _build(tcp_depth=depth)
+        sid = model.site("robot_0/right_grasp_site").id
+        sites[depth] = (data.site_xpos[sid].copy(), data.site_xmat[sid].reshape(3, 3).copy(),
+                        data.xpos[model.body("robot_0/right_link_6").id].copy())
+    (p0, r0, w0), (p1, _, w1) = sites[0.0], sites[0.02]
+    assert np.allclose(w0, w1)
+    assert np.allclose(p1 - p0, -0.02 * r0[:, 2], atol=1e-6)  # back along the approach axis
+    assert np.linalg.norm(p1 - w1) < np.linalg.norm(p0 - w0)  # i.e. toward the wrist

@@ -257,6 +257,8 @@ class BimanualYamPiPolicy(InferencePolicy):
         Returns:
             Single action from the buffer
         """
+        if self.client is None:  # harnesses that never call prepare_model() (eval scripts)
+            self.prepare_model()
         if self.starting_time is None:
             self.starting_time = time.time()
 
