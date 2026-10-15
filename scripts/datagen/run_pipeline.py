@@ -14,6 +14,7 @@ from molmo_spaces.configs.base_open_task_configs import OpeningBaseConfig, Closi
 from molmo_spaces.configs.base_pick_config import PickBaseConfig
 from molmo_spaces.configs.policy_configs_baselines import (
     BimanualYamPiPolicyConfig,
+    LinearBotOpenpiPolicyConfig,
     LinearBotPiPolicyConfig,
     PiPolicyConfig,
     TeleopPolicyConfig,
@@ -258,6 +259,8 @@ def get_policy_config(s: str, robot: str = None):
         if robot == "linearbot":
             return LinearBotPiPolicyConfig()
         return PiPolicyConfig()
+    elif s == "openpi":  # openpi websocket server (scripts/serve_policy.py)
+        return LinearBotOpenpiPolicyConfig() if robot == "linearbot" else PiPolicyConfig()
     elif s == "rum":
         return RumPolicyConfig()
     elif s == "teleop":
@@ -311,17 +314,21 @@ def main(args: argparse.ArgumentParser) -> None:
 
     # Overload policy
     policy = None
-    if args.policy in ("pi", "rum", "teleop"):
+    if args.policy in ("pi", "openpi", "rum", "teleop"):
         if args.policy == "rum":
             exp_config.policy_dt_ms = 500
             exp_config.task_horizon = 80
-        elif args.policy == "pi":
+        elif args.policy in ("pi", "openpi"):
             exp_config.policy_dt_ms = 500
             exp_config.task_horizon = 300
         elif args.policy == "teleop":
             exp_config.policy_dt_ms = 40  # More responsive for teleoperation
             exp_config.task_horizon = 1000
         exp_config.policy_config = get_policy_config(args.policy, robot=args.robot)
+        if args.policy_host or args.policy_port:
+            rc = dict(exp_config.policy_config.remote_config or {})
+            rc.update({k: v for k, v in (("host", args.policy_host), ("port", args.policy_port)) if v})
+            exp_config.policy_config.remote_config = rc
         policy = exp_config.policy_config.policy_factory(exp_config, None)
     elif args.policy == "planner":
         pass
@@ -346,9 +353,12 @@ if __name__ == "__main__":
         "--policy",
         type=str,
         default="planner",
-        choices=["planner", "pi", "rum", "teleop"],
+        choices=["planner", "pi", "openpi", "rum", "teleop"],
         help="policy to use: planner, pi, rum, or teleop",
     )
+
+    args.add_argument("--policy_host", type=str, default=None, help="learned-policy server host")
+    args.add_argument("--policy_port", type=int, default=None, help="learned-policy server port")
 
     # Arguments below ONLY used for policy from scratch (no eval or config given)
     args.add_argument("--task_type", type=str, default="pick", help="pick or open")

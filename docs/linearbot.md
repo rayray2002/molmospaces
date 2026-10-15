@@ -53,6 +53,20 @@ It connects lazily on the first inference, so harnesses that never call `prepare
   H5 + MP4s saved. Not checked against a real server or a trained checkpoint: none exists yet
   for this embodiment; a pi05 checkpoint must be trained on LinearBot (or bimanual YAM) data.
 
+## openpi (the project's training / serving stack)
+
+LinearBot's 14-dim vector is openpi's ALOHA layout. `LinearBotOpenpiPolicy` (`--policy openpi`)
+sends `{"state", "images": {cam_high: head, cam_left_wrist, cam_right_wrist} 3x224x224,
+"prompt"}` to `openpi scripts/serve_policy.py` and executes `actions[:chunk_size]`.
+
+End-to-end check (2026-10-15): 147 LinearBot planner demos -> `h5_to_lerobot.py --robot linearbot`
+(19,585 frames) -> openpi config `pi05_linearbot_lora` (ALOHA data config, adapt_to_pi=False,
+LoRA from pi05_droid_jointpos) -> 500 training steps (loss 0.31 -> 0.25) -> `serve_policy.py` ->
+`run_pipeline.py --robot linearbot --policy openpi --policy_port 8095` and
+`eval_poc.py --robot linearbot --policy pi`: episodes run closed loop, the arm tracks the
+model's targets (0.02-0.035 rad), grippers open and close. 500 steps is a smoke test, not a
+trained policy: no task success is claimed.
+
 ## JSON benchmarks
 
 Episode specs can name robot-MJCF cameras: `{"type": "mjcf", "name": "head_camera",

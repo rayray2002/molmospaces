@@ -159,3 +159,16 @@ class LinearBotPiPolicyConfig(BimanualYamPiPolicyConfig):
 
             self.policy_cls = LinearBotPiPolicy
             self.policy_factory = make_lenient(LinearBotPiPolicy)
+
+
+class LinearBotOpenpiPolicyConfig(PiPolicyConfig):
+    """LinearBotOpenpiPolicy: openpi websocket server with a 14-dim ALOHA-layout checkpoint
+    (LinearBot / bimanual data; serve with an aloha-style config, adapt_to_pi=False for LinearBot data)."""
+
+    def model_post_init(self, __context) -> None:
+        BasePolicyConfig.model_post_init(self, __context)
+        if self.policy_cls is None:
+            from molmo_spaces.policy.learned_policy.linearbot_pi_policy import LinearBotOpenpiPolicy
+
+            self.policy_cls = LinearBotOpenpiPolicy
+            self.policy_factory = make_lenient(LinearBotOpenpiPolicy)

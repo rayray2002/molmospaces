@@ -85,3 +85,23 @@ def test_tcp_depth_moves_grasp_site_toward_wrist():
     assert np.allclose(w0, w1)
     assert np.allclose(p1 - p0, -0.02 * r0[:, 2], atol=1e-6)  # back along the approach axis
     assert np.linalg.norm(p1 - w1) < np.linalg.norm(p0 - w0)  # i.e. toward the wrist
+
+
+def test_linearbot_openpi_policy_io():
+    """openpi ALOHA-layout obs / action mapping, no server needed."""
+    from molmo_spaces.policy.learned_policy.linearbot_pi_policy import LinearBotOpenpiPolicy
+
+    pol = LinearBotOpenpiPolicy.__new__(LinearBotOpenpiPolicy)
+    pol.grasping_type, pol.grasping_threshold = "binary", 0.5
+    pol.task = type("T", (), {"get_task_description": lambda self: "Pick up the Mug"})()
+    img = np.zeros((360, 640, 3), np.uint8)
+    obs = {"qpos": {"left_arm": [0.1] * 6, "left_gripper": [0.002, 0.002],
+                    "right_arm": [0.2] * 6, "right_gripper": [-0.0475, -0.0475]},
+           "head_camera": img, "left_wrist_camera": img, "right_wrist_camera": img}
+    x = pol.obs_to_model_input([obs])
+    assert x["state"].shape == (14,) and x["state"][6] == 0.0 and x["state"][13] == 1.0
+    assert {k: v.shape for k, v in x["images"].items()} == {k: (3, 224, 224) for k in pol.CAMERAS}
+    assert x["prompt"] == "pick up the mug"
+    act = pol.model_output_to_action(np.r_[np.zeros(6), 0.9, np.ones(6), 0.1])
+    assert np.allclose(act["left_gripper"], [-0.0475, -0.0475]) and np.allclose(act["right_gripper"], [0.002, 0.002])
+    assert set(act) == {"left_arm", "left_gripper", "right_arm", "right_gripper"}
