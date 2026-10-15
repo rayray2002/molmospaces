@@ -78,8 +78,9 @@ robot from `exp_config.robot_config`, so set `LinearBotRobotConfig()` there.
 
 - Dimensions other than caster spacing, stroke, lift speed and mass are estimates; grip force
   (finger kp 2000) is a guess. Measure the real robot and override the config fields.
-- Open / close run (`--task_type open|close`): 11/24 and 9/16 planner successes (ithor 1-8,
-  seed 2; no DROID baseline run). Navigation (`nav_to_obj`, procthor-10k) 8/8. Bimanual tasks are untested; the left arm
+- Open / close (`--task_type open|close`, ithor 1-8, seed 2): LinearBot 11/24 and 9/16, DROID 21/28
+  and 6/26 (both differences p ~ 0.05). Open loses to DROID on pregrasp IK (69 vs 42 failures) and
+  handles slipping out (41 vs 21): a 6-DOF arm on a locked base pulling handles. Not tuned. Navigation (`nav_to_obj`, procthor-10k) 8/8. Bimanual tasks are untested; the left arm
   never manipulates.
 - No collision-aware whole-body planning (cuRobo not installed): the wrist can be blocked by
   shelf boards (logged as TCP tracking-error retries, as for DROID).
