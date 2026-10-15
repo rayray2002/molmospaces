@@ -77,8 +77,9 @@ robot from `exp_config.robot_config`, so set `LinearBotRobotConfig()` there.
 
 - Dimensions other than caster spacing, stroke, lift speed and mass are estimates; grip force
   (finger kp 2000) is a guess. Measure the real robot and override the config fields.
-- Pick, pick-and-place only; open/close, navigation and bimanual tasks are untested; the left
-  arm never manipulates.
+- Open / close run (`--task_type open|close`): 11/24 and 9/16 planner successes (ithor 1-8,
+  seed 2; no DROID baseline run). Navigation and bimanual tasks are untested; the left arm never
+  manipulates.
 - No collision-aware whole-body planning (cuRobo not installed): the wrist can be blocked by
   shelf boards (logged as TCP tracking-error retries, as for DROID).
 - Shared fixes (controller re-sync, `ik_locked_move_groups`) change behaviour for other robots;
