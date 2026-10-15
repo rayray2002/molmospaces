@@ -65,7 +65,8 @@ LoRA from pi05_droid_jointpos) -> 500 training steps (loss 0.31 -> 0.25) -> `ser
 `run_pipeline.py --robot linearbot --policy openpi --policy_port 8095` and
 `eval_poc.py --robot linearbot --policy pi`: episodes run closed loop, the arm tracks the
 model's targets (0.02-0.035 rad), grippers open and close. 500 steps is a smoke test, not a
-trained policy: no task success is claimed.
+trained policy: no task success is claimed. A full 4000-step LoRA (loss 0.03) on the same 147 demos picked 1/16 closed loop
+(ithor 2/4/6/8, new seed); the project's Franka LoRAs trained the same way on ~100 demos score 0-3%.
 
 ## JSON benchmarks
 
@@ -78,8 +79,8 @@ robot from `exp_config.robot_config`, so set `LinearBotRobotConfig()` there.
 - Dimensions other than caster spacing, stroke, lift speed and mass are estimates; grip force
   (finger kp 2000) is a guess. Measure the real robot and override the config fields.
 - Open / close run (`--task_type open|close`): 11/24 and 9/16 planner successes (ithor 1-8,
-  seed 2; no DROID baseline run). Navigation and bimanual tasks are untested; the left arm never
-  manipulates.
+  seed 2; no DROID baseline run). Navigation (`nav_to_obj`, procthor-10k) 8/8. Bimanual tasks are untested; the left arm
+  never manipulates.
 - No collision-aware whole-body planning (cuRobo not installed): the wrist can be blocked by
   shelf boards (logged as TCP tracking-error retries, as for DROID).
 - Shared fixes (controller re-sync, `ik_locked_move_groups`) change behaviour for other robots;
