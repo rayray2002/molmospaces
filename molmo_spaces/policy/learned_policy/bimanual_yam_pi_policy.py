@@ -207,6 +207,8 @@ class BimanualYamPiPolicy(InferencePolicy):
         Returns:
             Dictionary in raw format that build_dataset_frame will transform
         """
+        if isinstance(obs, list):  # task.step returns one observation per env
+            obs = obs[0]
         model_input = {}
 
         # Process camera images - use short keys (build_dataset_frame strips "observation.images." prefix)
