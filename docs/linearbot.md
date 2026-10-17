@@ -36,7 +36,9 @@ planner (cuRobo) is the real fix; the per-solve bound lets the base creep over a
 
 Grasp feasibility uses batched Warp IK (`LinearBotParallelKinematics`, CPU by default,
 `ik_device="cuda:0"` ~9x faster): pick 91 s per house (was 328 s), bimanual pick 164 s (was 368 s);
-19/28 vs 21/27 pick successes (p = 0.55). Peak memory ~3 GB per datagen process.
+19/28 vs 21/27 pick successes (p = 0.55). The first batch success is re-solved by the serial
+solver from the current state before use (warp can pick an arm branch the tracker never reaches):
+pick 18/27, bimanual_pick 22/37 (serial-only 22/39), same speed. Peak memory ~3 GB per process.
 
 ## Bimanual
 

@@ -94,6 +94,7 @@ class LinearBotKinematics(MlSpacesKinematics):
 
 
 class LinearBotParallelKinematics(SimpleWarpKinematics):
+    _serial: "LinearBotKinematics | None" = None
     """Batched (Warp) IK for grasp feasibility and plan targets: the solved gripper's arm and the
     lift, base held (base motion is LinearBotKinematics' bounded per-step job). On 60 reachable
     lift + right-arm targets: 57/60 in 0.84 s on CPU (0.09 s on GPU) vs 58/60 in 17 s for the serial
@@ -109,9 +110,29 @@ class LinearBotParallelKinematics(SimpleWarpKinematics):
             unlocked = [m for m in unlocked_move_group_ids if m not in ("base", other)]
         else:
             unlocked = unlocked_move_group_ids
-        return super().ik(move_group_id, poses, unlocked, q0_dicts, base_poses, rel_to_base=rel_to_base,
-                          converge_eps=converge_eps, success_eps=success_eps, max_iter=max_iter,
-                          damping=damping, dt=dt)
+        res = super().ik(move_group_id, poses, unlocked, q0_dicts, base_poses, rel_to_base=rel_to_base,
+                         converge_eps=converge_eps, success_eps=success_eps, max_iter=max_iter,
+                         damping=damping, dt=dt)
+        return self._confirm_first(move_group_id, poses, unlocked, q0_dicts, base_poses, rel_to_base, res)
+
+    def _confirm_first(self, move_group_id, poses, unlocked, q0_dicts, base_poses, rel_to_base, res):
+        """Warp can solve a grasp through an arm configuration the per-step tracker never reaches from
+        here (pick failures shifted to TCP tracking errors). Re-solve batch successes in order with the
+        serial solver warm-started at the current state, no restarts, until one agrees; callers take
+        the first success. ponytail: later successes stay unconfirmed."""
+        if self._serial is None:
+            self._serial = LinearBotKinematics(self._robot_config)
+            self._serial.n_restarts = 0
+        poses = np.asarray(poses)
+        for i, r in enumerate(res):
+            if r is None:
+                continue
+            q0 = q0_dicts[i] if isinstance(q0_dicts, list) else q0_dicts
+            base = base_poses[i] if np.ndim(base_poses) == 3 else base_poses
+            if self._serial.ik(move_group_id, poses[i], unlocked, q0, base, rel_to_base=rel_to_base) is not None:
+                break
+            res[i] = None
+        return res
 
 
 class LinearBotRobot(BimanualYamRobot):
