@@ -20,7 +20,7 @@ from molmo_spaces.controllers.joint_rel_pos import (
     JointRelPosController,
 )
 from molmo_spaces.kinematics.mujoco_kinematics import MlSpacesKinematics
-from molmo_spaces.kinematics.parallel.dummy_parallel_kinematics import DummyParallelKinematics
+from molmo_spaces.kinematics.parallel.warp_kinematics import SimpleWarpKinematics
 from molmo_spaces.robots.bimanual_yam import BimanualYamRobot
 from molmo_spaces.robots.robot_views.linearbot_view import LinearBotGripperGroup
 
@@ -39,6 +39,12 @@ class LinearBotKinematics(MlSpacesKinematics):
 
     n_restarts: int = 5
     min_iter: int = 300
+    # when manipulation IK may move the base (LinearBotRobotConfig.manipulation_moves_base): largest
+    # base shift per solve; beyond it the arm-only solution is used. ponytail: no collision model --
+    # the bound keeps the base near where placement put it, a collision-aware planner (cuRobo) is the
+    # real fix; the bound is per solve, so tracking can still creep along a long trajectory.
+    max_base_shift: float = 0.15  # m
+    max_base_turn: float = 0.3  # rad
 
     def __init__(self, robot_config) -> None:
         super().__init__(robot_config)
@@ -46,6 +52,23 @@ class LinearBotKinematics(MlSpacesKinematics):
 
     def ik(self, move_group_id, pose, unlocked_move_group_ids, q0, base_pose, rel_to_base=False,
            eps=1e-4, max_iter=1000, damping=None, dt=None):
+        res = self._ik(move_group_id, pose, unlocked_move_group_ids, q0, base_pose, rel_to_base, eps, max_iter)
+        unlocked = unlocked_move_group_ids or self._robot_view.move_group_ids()
+        if res is None or "base" not in unlocked:
+            return res
+        d = np.asarray(res["base"], float) - np.asarray(q0["base"], float)
+        turn = abs((d[2] + np.pi) % (2 * np.pi) - np.pi)
+        arm_only = [m for m in unlocked if m != "base"]
+        if np.linalg.norm(d[:2]) > self.max_base_shift or turn > self.max_base_turn:
+            return self._ik(move_group_id, pose, arm_only, q0, base_pose, rel_to_base, eps, max_iter)
+        # the 95 kg base lags its target by several cm while the arm tracks within a few mrad: command
+        # the base toward the whole-body solution but solve the arm for where the base is now, so
+        # the hand stays on its path while the base catches up (arm pose for the target base if the
+        # arm cannot reach from here)
+        here = self._ik(move_group_id, pose, arm_only, q0, base_pose, rel_to_base, eps, max_iter)
+        return res if here is None else {**here, "base": res["base"]}
+
+    def _ik(self, move_group_id, pose, unlocked_move_group_ids, q0, base_pose, rel_to_base, eps, max_iter):
         kw = dict(rel_to_base=rel_to_base, eps=eps, max_iter=max(max_iter, self.min_iter),
                   damping=1e-4, dt=0.5)
         res = super().ik(move_group_id, pose, unlocked_move_group_ids, q0, base_pose, **kw)
@@ -70,11 +93,32 @@ class LinearBotKinematics(MlSpacesKinematics):
         return None if q is None else self.ik("left_gripper", left_pose, ["left_arm"], q, base_pose)
 
 
+class LinearBotParallelKinematics(SimpleWarpKinematics):
+    """Batched (Warp) IK for grasp feasibility and plan targets: the solved gripper's arm and the
+    lift, base held (base motion is LinearBotKinematics' bounded per-step job). On 60 reachable
+    lift + right-arm targets: 57/60 in 0.84 s on CPU (0.09 s on GPU) vs 58/60 in 17 s for the serial
+    LinearBotKinematics, with these defaults; upstream's (50 iterations, no damping) solve 54/60."""
+
+    def ik(self, move_group_id, poses, unlocked_move_group_ids, q0_dicts, base_poses, rel_to_base=False,
+           converge_eps=1e-3, success_eps=5e-4, max_iter=300, damping=1e-4, dt=0.5):
+        side = move_group_id.split("_")[0]
+        if side in ("left", "right"):  # an arm's frame; other targets (warmup: "lift") pass through
+            other = f"{'left' if side == 'right' else 'right'}_arm"
+            if unlocked_move_group_ids is None:  # e.g. grasp_sample: "everything" means this arm + lift
+                unlocked_move_group_ids = ["lift", f"{side}_arm"]
+            unlocked = [m for m in unlocked_move_group_ids if m not in ("base", other)]
+        else:
+            unlocked = unlocked_move_group_ids
+        return super().ik(move_group_id, poses, unlocked, q0_dicts, base_poses, rel_to_base=rel_to_base,
+                          converge_eps=converge_eps, success_eps=success_eps, max_iter=max_iter,
+                          damping=damping, dt=dt)
+
+
 class LinearBotRobot(BimanualYamRobot):
     def __init__(self, mj_data: MjData, config: "LinearBotRobotConfig") -> None:
         super().__init__(mj_data, config)
         self._kinematics = LinearBotKinematics(config)
-        self._parallel_kinematics = DummyParallelKinematics(config, self._kinematics)
+        self._parallel_kinematics = LinearBotParallelKinematics(config, device=config.ik_device)
         base_controller_cls = {
             "holo_joint_planar_position": JointPosController,  # absolute world [x, y, theta]
             "holo_joint_rel_planar_position": JointRelPosController,  # world-frame step

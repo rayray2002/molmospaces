@@ -176,6 +176,12 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
     elif task_type == "packing":
         datagen_cfg = PackingDataGenConfig()
         datagen_cfg.policy_config = PickAndPlacePlannerPolicyConfig()
+    elif task_type == "bimanual_pick":  # LinearBot only: left hand picks, holds, right hand picks
+        if robot != "linearbot":
+            raise ValueError("--task_type bimanual_pick needs --robot linearbot")
+        from molmo_spaces.configs.base_bimanual_pick_config import BimanualPickBaseConfig
+
+        datagen_cfg = BimanualPickBaseConfig(**req)
     elif task_type == "nav_to_obj":
         datagen_cfg = NavToObjBaseConfig(**req)
         datagen_cfg.policy_config = AStarNavToObjPolicyConfig()
@@ -269,7 +275,8 @@ def setup_config(args: argparse.ArgumentParser) -> MlSpacesExpConfig:
         datagen_cfg.robot_config = BimanualYamRobotConfig()
         datagen_cfg.camera_config = BimanualYamCameraSystem()
     elif robot == "linearbot":
-        datagen_cfg.robot_config = LinearBotRobotConfig(active_arm=getattr(args, "arm", "right"))
+        datagen_cfg.robot_config = LinearBotRobotConfig(
+            active_arm=getattr(args, "arm", "right"), manipulation_moves_base=getattr(args, "move_base", False))
         apply_linearbot_datagen(datagen_cfg, robot_config=datagen_cfg.robot_config)
     else:
         raise ValueError
@@ -456,6 +463,8 @@ if __name__ == "__main__":
 
     args.add_argument("--arm", choices=["right", "left"], default="right",
                       help="linearbot: arm the single-arm planners drive")
+    args.add_argument("--move_base", action="store_true",
+                      help="linearbot: manipulation planners may move the base with the arm (bounded)")
     args.add_argument("--policy_host", type=str, default=None, help="learned-policy server host")
     args.add_argument("--policy_port", type=int, default=None, help="learned-policy server port")
 

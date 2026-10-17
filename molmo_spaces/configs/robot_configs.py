@@ -570,6 +570,12 @@ class LinearBotRobotConfig(BaseRobotConfig):
     }
     # arm the single-arm planners drive; the other arm holds (bimanual code uses both)
     active_arm: Literal["right", "left"] = "right"
+    # let manipulation planners' IK move the base with the arm (bounded by LinearBotKinematics
+    # max_base_shift / max_base_turn per solve); off: the base drives only between phases
+    manipulation_moves_base: bool = False
+    # warp device for batched IK (grasp feasibility): "cpu" like Franka; "cuda:0" is ~9x faster but
+    # every datagen worker process then opens its own GPU context
+    ik_device: str = "cpu"
     init_qpos_noise_range: dict[str, list[float]] | None = None
     command_mode: dict[str, str] = {
         "base": "holo_joint_planar_position",
@@ -589,8 +595,9 @@ class LinearBotRobotConfig(BaseRobotConfig):
 
     def model_post_init(self, __context) -> None:
         super().model_post_init(__context)
-        if self.active_arm != "right" and self.robot_view_factory is LinearBotRobotView:
-            self.robot_view_factory = functools.partial(LinearBotRobotView, active_arm=self.active_arm)
+        if (self.active_arm != "right" or self.manipulation_moves_base) and self.robot_view_factory is LinearBotRobotView:
+            self.robot_view_factory = functools.partial(
+                LinearBotRobotView, active_arm=self.active_arm, move_base=self.manipulation_moves_base)
 
 
 def apply_linearbot_datagen(cfg, robot_config: "LinearBotRobotConfig | None" = None) -> None:

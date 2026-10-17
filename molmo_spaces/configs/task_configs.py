@@ -68,6 +68,14 @@ class PickTaskConfig(BaseMujocoTaskConfig):
     enable_rendering: bool = True  # Whether to enable environment rendering for visual sensors
 
 
+class BimanualPickTaskConfig(PickTaskConfig):
+    """Left pickup uses inherited fields; right pickup has its own start and goal."""
+
+    right_pickup_obj_name: str | None = None
+    right_pickup_obj_start_pose: list[float] | None = None
+    right_pickup_obj_goal_pose: list[float] | None = None
+
+
 class PickAndPlaceTaskConfig(PickTaskConfig):
     place_receptacle_name: str | None = None
     place_receptacle_start_pose: list[float] | None = None
@@ -199,6 +207,7 @@ class NavToObjTaskConfig(BaseMujocoTaskConfig):
 AllTaskConfigs: TypeAlias = (
     BaseMujocoTaskConfig
     | PickTaskConfig
+    | BimanualPickTaskConfig
     | PickAndPlaceTaskConfig
     | PickAndPlaceColorTaskConfig
     | PickAndPlaceNextToTaskConfig

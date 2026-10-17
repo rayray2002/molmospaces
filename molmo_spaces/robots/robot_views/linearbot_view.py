@@ -114,9 +114,12 @@ class LinearBotRobotView(RobotView):
     move group) use the right arm.
     """
 
-    def __init__(self, mj_data: MjData, namespace: str = "", active_arm: Literal["right", "left"] = "right") -> None:
+    def __init__(self, mj_data: MjData, namespace: str = "", active_arm: Literal["right", "left"] = "right",
+                 move_base: bool = False) -> None:
         self._namespace = namespace
         self.active_arm = active_arm
+        self.move_base = move_base
+        self.lock_lift = False
         idle = "left" if active_arm == "right" else "right"
         base = LinearBotBaseGroup(mj_data, namespace=namespace)
         move_groups = {"base": base, "lift": LinearBotLiftGroup(mj_data, base, namespace=namespace)}
@@ -133,11 +136,26 @@ class LinearBotRobotView(RobotView):
     def base(self) -> LinearBotBaseGroup:
         return self._move_groups["base"]
 
+    def set_active_arm(self, side: Literal["left", "right"], *, lock_lift: bool = False) -> None:
+        """Select the single-arm planner's gripper while preserving all move groups."""
+        if side not in ("left", "right"):
+            raise ValueError(f"Unknown LinearBot arm: {side}")
+        self.active_arm = side
+        self.lock_lift = lock_lift
+        first = (f"{side}_arm", f"{side}_gripper")
+        self._move_groups = {
+            key: self._move_groups[key]
+            for key in (*first, *(key for key in self._move_groups if key not in first))
+        }
+        self.__dict__.pop("_gripper_movegroup_ids_cache", None)  # get_gripper_movegroup_ids caches the order
+
     def get_ik_excluded_movegroup_ids(self) -> list[str]:
         """Manipulation planners keep the base and the idle arm still: the base drives between
         phases, not during them (IK has no collision model and pushed the base into counters), and
         single-arm planners use the active arm (first gripper move group)."""
-        return ["base", f"{'left' if self.active_arm == 'right' else 'right'}_arm"]
+        return ([] if self.move_base else ["base"]) + [f"{'left' if self.active_arm == 'right' else 'right'}_arm"] + (
+            ["lift"] if self.lock_lift else []
+        )
 
     # navigation planners (AStarNavToObjPolicy) track [x, y, theta] base waypoints, as on RBY1
     def distance_to(self, move_group_ids: list[str], target_pose: list) -> float:

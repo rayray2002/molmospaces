@@ -183,3 +183,66 @@ def test_bimanual_ik_and_tracking():
         mujoco.mj_step(model, data)
     for g in ("left_gripper", "right_gripper"):
         assert np.linalg.norm(view.get_move_group(g).leaf_frame_to_world[:3, 3] - fk[g][:3, 3]) < 0.02
+
+
+def test_set_active_arm_switches_planner_arm_mid_episode():
+    """BimanualPickPlannerPolicy hands over from the left to the right arm on one view; the
+    cached gripper order and the IK exclusions must follow."""
+    _, _, _, view = _build()
+    assert view.get_gripper_movegroup_ids()[0] == "right_gripper"  # fills the cache
+    view.set_active_arm("left")
+    assert view.get_gripper_movegroup_ids()[0] == "left_gripper"
+    assert set(view.get_ik_excluded_movegroup_ids()) == {"base", "right_arm"}
+    view.set_active_arm("right", lock_lift=True)  # second hand: lift held where the first left it
+    assert view.get_gripper_movegroup_ids()[0] == "right_gripper"
+    assert set(view.get_ik_excluded_movegroup_ids()) == {"base", "left_arm", "lift"}
+
+
+def test_ik_moves_base_within_bound_when_unlocked():
+    """With the base unlocked (manipulation_moves_base) IK may shift it to reach, never past
+    max_base_shift; a target needing more falls back to an arm-only solve."""
+    cfg, _, _, view = _build()
+    kin = LinearBotKinematics(cfg)
+    q = view.get_qpos_dict()
+    unlocked = ["base", "lift", "right_arm"]
+    for shift, expect_base_move in ((0.08, True), (0.6, False)):
+        moved = {k: np.array(v, dtype=float) for k, v in q.items()}
+        moved["base"] = np.asarray(q["base"], float) + [shift, 0.0, 0.0]
+        target = kin.fk(moved, view.base.pose)["right_gripper"]  # where the hand is after a base shift
+        sol = kin.ik("right_gripper", target, unlocked, q, view.base.pose)
+        if sol is None:
+            assert not expect_base_move
+            continue
+        d = np.asarray(sol["base"]) - np.asarray(q["base"])
+        assert np.linalg.norm(d[:2]) <= kin.max_base_shift + 1e-6
+        if expect_base_move:  # the arm reaches from where the base is now ...
+            now = {**sol, "base": np.asarray(q["base"], float)}
+            reached = kin.fk(now, view.base.pose)["right_gripper"]
+            assert np.linalg.norm(reached[:3, 3] - target[:3, 3]) < 1e-3
+            assert np.linalg.norm(d[:2]) > 0.01  # ... while the base is sent toward the target
+
+
+def test_batched_ik_matches_serial_and_holds_base():
+    """LinearBotParallelKinematics (warp) solves the same reachable targets as LinearBotKinematics,
+    for either arm, and never moves the base even when asked to unlock everything."""
+    from molmo_spaces.robots.linearbot import LinearBotParallelKinematics
+
+    cfg, _, _, view = _build()
+    kin, par = LinearBotKinematics(cfg), LinearBotParallelKinematics(cfg)
+    par.warmup_ik(8)  # the planner warms up first; it solves for the first frame group ("lift")
+    q = view.get_qpos_dict()
+    rng = np.random.default_rng(0)
+    for side in ("right", "left"):
+        targets = []
+        for _ in range(12):
+            g = {k: np.array(v, dtype=float) for k, v in q.items()}
+            lim = view.get_move_group(f"{side}_arm").joint_pos_limits
+            g[f"{side}_arm"] = rng.uniform(lim[:, 0], lim[:, 1])
+            targets.append(kin.fk(g, view.base.pose)[f"{side}_gripper"])
+        res = par.ik(f"{side}_gripper", np.stack(targets), None, [q] * 12, view.base.pose)
+        solved = [(r, t) for r, t in zip(res, targets) if r is not None]
+        assert len(solved) >= 10
+        for r, t in solved:
+            full = {**q, **r}
+            assert np.allclose(full["base"], q["base"])
+            assert np.linalg.norm(kin.fk(full, view.base.pose)[f"{side}_gripper"][:3, 3] - t[:3, 3]) < 1e-3

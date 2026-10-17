@@ -30,6 +30,18 @@ actions, H5 recordings and the 14-dim policy layout. `LinearBotKinematics.bimanu
 right_pose, q0, base_pose)` solves both grasp sites at once (shared lift solved with the right
 arm, base held); tested to track both targets under the joint controllers.
 
+Bimanual datagen: `run_pipeline.py --robot linearbot --task_type bimanual_pick` ("Pick up the X
+with the left hand and the Y with the right hand."). `BimanualPickTaskSampler` takes the pick
+sampler's object + base placement for the left hand, then a second graspable object within the
+right arm's reach (moving the nearest graspable one onto the same support, ~0.3 m in front of the
+right arm, when none is in reach). `BimanualPickPlannerPolicy` runs the unmodified pick planner for
+the left hand, holds it (arm, gripper, lift), then runs it for the right hand. Success: both objects
+lifted, each held by its own hand only.
+
+Coordinated two-hand lift (scripted, own table scene, no house):
+`python -m molmo_spaces.tasks.linearbot_bimanual_lift [--seed N] [--render-dir DIR]` lifts an open
+box by its end walls with both hands at once (20/20 seeds, box raised >= 9 cm).
+
 ## Planner data collection
 
 ```bash
