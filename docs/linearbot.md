@@ -23,6 +23,21 @@ Environment: upstream main needs `molmospaces-resources==0.0.3a2` and `mink<1.0`
 carry `"base"` / `"lift"`; groups it leaves out hold still. Navigation (`--task_type nav_to_obj`,
 procthor-10k) drives the base with A*.
 
+## Base motion during manipulation (opt-in)
+
+`LinearBotRobotConfig.manipulation_moves_base` / `run_pipeline.py --move_base`: manipulation IK may
+move the base with the arm and lift, at most `max_base_shift` 0.15 m / `max_base_turn` 0.3 rad per
+solve (else the arm-only solution). The 95 kg base lags its target by several cm, so the arm is
+solved for where the base is now while the base is sent toward the whole-body target. Pick, ithor
+2/4/6/8, seed 2: 13/15 (base held: 19/28 on ithor 1-8). No collision model: a collision-aware
+planner (cuRobo) is the real fix; the per-solve bound lets the base creep over a long trajectory.
+
+## Speed
+
+Grasp feasibility uses batched Warp IK (`LinearBotParallelKinematics`, CPU by default,
+`ik_device="cuda:0"` ~9x faster): pick 91 s per house (was 328 s), bimanual pick 164 s (was 368 s);
+19/28 vs 21/27 pick successes (p = 0.55). Peak memory ~3 GB per datagen process.
+
 ## Bimanual
 
 Both arms are full move groups (`left_arm`, `left_gripper`, `right_arm`, `right_gripper`) in
@@ -37,6 +52,10 @@ right arm's reach (moving the nearest graspable one onto the same support, ~0.3 
 right arm, when none is in reach). `BimanualPickPlannerPolicy` runs the unmodified pick planner for
 the left hand, holds it (arm, gripper, lift), then runs it for the right hand. Success: both objects
 lifted, each held by its own hand only.
+
+Measured (ithor 1-11, seed 2, batched IK): bimanual_pick 19/37 executed episodes (51%), 164 s per
+house; serial IK before: 22/39 (56%), 368 s per house (difference p = 0.82). Most losses are in the
+right-hand phase.
 
 Coordinated two-hand lift (scripted, own table scene, no house):
 `python -m molmo_spaces.tasks.linearbot_bimanual_lift [--seed N] [--render-dir DIR]` lifts an open
