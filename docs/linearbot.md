@@ -142,9 +142,12 @@ robot from `exp_config.robot_config`, so set `LinearBotRobotConfig()` there.
 - Open / close (`--task_type open|close`, ithor 1-8, seed 2): LinearBot 11/24 and 9/16, DROID 21/28
   and 6/26 (both differences p ~ 0.05). Open loses to DROID on pregrasp IK (69 vs 42 failures) and
   handles slipping out (41 vs 21): a 6-DOF arm on a locked base pulling handles. A closer base (0.45 m: 4/23) and a stronger
-  grip (finger kp 5000: 8/24) were both worse; closing the gap needs base motion during opening. Navigation (`nav_to_obj`, procthor-10k) 8/8. Bimanual tasks are untested; the left arm
-  never manipulates.
+  grip (finger kp 5000: 8/24) were both worse; closing the gap needs base motion during opening. Navigation (`nav_to_obj`, procthor-10k) 8/8.
 - No collision-aware whole-body planning (cuRobo not installed): the wrist can be blocked by
   shelf boards (logged as TCP tracking-error retries, as for DROID).
+- Grasps are always top-down: the pick planners rank with `grasp_vertical_cost_weight` (2.0).
+  `grasp_horizontal_cost_weight` (default 0) can prefer side grasps, but on ithor 1-11 / seed 2
+  no side grasp passed the IK check (97/97 selected grasps still top-down, pick 19/37 vs 23/40), so
+  LinearBot keeps the default. Why side grasps are infeasible is open.
 - Shared fixes (controller re-sync, `ik_locked_move_groups`) change behaviour for other robots;
   rerun a DROID baseline before using them for Franka work.

@@ -260,6 +260,7 @@ class PickAndPlacePlannerPolicy(BaseObjectManipulationPlannerPolicy):
             pos_cost_weight=self.policy_config.grasp_pos_cost_weight,
             rot_cost_weight=self.policy_config.grasp_rot_cost_weight,
             vertical_cost_weight=self.policy_config.grasp_vertical_cost_weight,
+            horizontal_cost_weight=self.policy_config.grasp_horizontal_cost_weight,
             com_dist_cost_weight=self.policy_config.grasp_com_dist_cost_weight,
         )
 

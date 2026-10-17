@@ -104,6 +104,7 @@ class ObjectManipulationPlannerPolicyConfig(BasePolicyConfig):
     grasp_pos_cost_weight: float = 1.0
     grasp_rot_cost_weight: float = 0.01
     grasp_vertical_cost_weight: float = 2.0
+    grasp_horizontal_cost_weight: float = 0.0  # > 0 prefers side grasps
     grasp_com_dist_cost_weight: float = 8.0
     # grasp sampling configuration (feasibility checking)
     filter_feasible_grasps: bool = True
