@@ -7,6 +7,7 @@ Everything else (base height, column position, arm spacing and mount height, hea
 is a guess exposed in LinearBotRobotConfig -- measure the real robot and set it there.
 """
 
+import logging
 from typing import TYPE_CHECKING, cast
 
 import mujoco
@@ -27,6 +28,8 @@ from molmo_spaces.robots.robot_views.linearbot_view import LinearBotGripperGroup
 if TYPE_CHECKING:
     from molmo_spaces.configs.robot_configs import LinearBotRobotConfig
 
+
+log = logging.getLogger(__name__)
 
 class LinearBotKinematics(MlSpacesKinematics):
     """IK tuned for the 6-DOF YAM arm on the lift.
@@ -95,6 +98,7 @@ class LinearBotKinematics(MlSpacesKinematics):
 
 class LinearBotParallelKinematics(SimpleWarpKinematics):
     _serial: "LinearBotKinematics | None" = None
+    scene_data: MjData | None = None  # the live scene (set by LinearBotRobot): arm-vs-furniture check
     """Batched (Warp) IK for grasp feasibility and plan targets: the solved gripper's arm and the
     lift, base held (base motion is LinearBotKinematics' bounded per-step job). On 60 reachable
     lift + right-arm targets: 57/60 in 0.84 s on CPU (0.09 s on GPU) vs 58/60 in 17 s for the serial
@@ -129,10 +133,39 @@ class LinearBotParallelKinematics(SimpleWarpKinematics):
                 continue
             q0 = q0_dicts[i] if isinstance(q0_dicts, list) else q0_dicts
             base = base_poses[i] if np.ndim(base_poses) == 3 else base_poses
-            if self._serial.ik(move_group_id, poses[i], unlocked, q0, base, rel_to_base=rel_to_base) is not None:
-                break
+            sol = self._serial.ik(move_group_id, poses[i], unlocked, q0, base, rel_to_base=rel_to_base)
+            if sol is not None:
+                if not self._arm_hits_scene(move_group_id, sol):
+                    break
+                log.info("[LINEARBOT] grasp %d rejected: arm links touch the scene", i)
             res[i] = None
         return res
+
+    def _arm_hits_scene(self, move_group_id: str, qpos: dict) -> bool:
+        """Grasp collision checks test the gripper only; the YAM wrist / forearm then jammed on shelf
+        boards (TCP tracking-error retries). Pose the arm in a scratch copy of the scene and look for
+        contacts between its links (not the fingers, which touch the object) and anything outside the
+        robot."""
+        if self.scene_data is None or move_group_id.split("_")[0] not in ("left", "right"):
+            return False
+        m = self.scene_data.model
+        d = MjData(m)
+        d.qpos[:], d.qvel[:] = self.scene_data.qpos, 0.0
+        ns = self._robot_config.robot_namespace
+        view = self._robot_config.robot_view_factory(d, ns)
+        for mg, q in qpos.items():
+            view.get_move_group(mg).joint_pos = q
+        mujoco.mj_forward(m, d)
+        links = f"{ns}{move_group_id.split('_')[0]}_link_"
+        for c in d.contact[: d.ncon]:
+            if c.dist > 0:
+                continue
+            b1, b2 = m.geom_bodyid[c.geom1], m.geom_bodyid[c.geom2]
+            for arm, other in ((b1, b2), (b2, b1)):
+                name = m.body(arm).name
+                if name.startswith(links) and "finger" not in name and not m.body(other).name.startswith(ns):
+                    return True
+        return False
 
 
 class LinearBotRobot(BimanualYamRobot):
@@ -140,6 +173,7 @@ class LinearBotRobot(BimanualYamRobot):
         super().__init__(mj_data, config)
         self._kinematics = LinearBotKinematics(config)
         self._parallel_kinematics = LinearBotParallelKinematics(config, device=config.ik_device)
+        self._parallel_kinematics.scene_data = mj_data
         base_controller_cls = {
             "holo_joint_planar_position": JointPosController,  # absolute world [x, y, theta]
             "holo_joint_rel_planar_position": JointRelPosController,  # world-frame step

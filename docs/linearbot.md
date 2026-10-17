@@ -39,6 +39,11 @@ Grasp feasibility uses batched Warp IK (`LinearBotParallelKinematics`, CPU by de
 19/28 vs 21/27 pick successes (p = 0.55). The first batch success is re-solved by the serial
 solver from the current state before use (warp can pick an arm branch the tracker never reaches):
 pick 18/27, bimanual_pick 22/37 (serial-only 22/39), same speed. Peak memory ~3 GB per process.
+The confirmed grasp is also rejected if, posed in a copy of the live scene, the arm's links (not the
+fingers) touch anything outside the robot. Remaining pick failures (pick 18/28 with it) are TCP
+tracking errors in the move to pregrasp: instrumented failures in ithor 1 and 7 all have the wrist,
+fingers or the idle arm pressed against shelf boards on the straight-line path into a shelf cubby.
+That needs a collision-aware path planner (cuRobo), not a grasp filter.
 
 ## Bimanual
 
